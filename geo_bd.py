@@ -1,4 +1,5 @@
 import psycopg2
+from psycopg2 import sql
 
 
 def insert_station(name_channel, name_network, name_station, x=None, y=None, z=None, latitude=None, longitude=None,
@@ -10,31 +11,45 @@ def insert_station(name_channel, name_network, name_station, x=None, y=None, z=N
                             password='123', host='localhost,192.168.0.1', port='5432')
     cursor = conn.cursor()
     conn.autocommit = True
-    cursor.execute(f'SELECT name_station , station_key '
-                   f'FROM station '
-                   f'WHERE to_tsvector(\'english\', name_station) @@ to_tsquery(\'english\', \'{name_station}\') and '
-                   f'to_tsvector(\'english\', channel) @@ to_tsquery(\'english\', \'{name_channel}\') and '
-                   f'to_tsvector(\'english\', network) @@ to_tsquery(\'english\', \'{name_network}\');')
+    cursor.execute(sql.SQL('SELECT name_station , station_key '
+                           'FROM station '
+                           'WHERE to_tsvector(\'english\', name_station) @@ to_tsquery(\'english\',{}) and '
+                           'to_tsvector(\'english\', channel) @@ to_tsquery(\'english\', {}) and '
+                           'to_tsvector(\'english\', network) @@ to_tsquery(\'english\', {});').format(
+        sql.Identifier(name_station), sql.Identifier(name_channel), sql.Identifier(name_network)))
     res = cursor.fetchall()
     if len(res) != 0:
         print(res)
         return res[0][1]
     if x and y and z and latitude and longitude:
-        cursor.execute(f'insert into location (x,y,z,latitude,longitude)'
-                       f'values ({x},{y},{z},{latitude}, {longitude});'
-                       f'SELECT currval(pg_get_serial_sequence(\'location\',\'location_key\'));')
+        cursor.execute(sql.SQL('insert into location (x,y,z,latitude,longitude)'
+                               'values ({},{},{},{}, {});'
+                               'SELECT currval(pg_get_serial_sequence(\'location\',\'location_key\'));').format(
+            sql.Identifier(x),
+            sql.Identifier(y),
+            sql.Identifier(z),
+            sql.Identifier(latitude),
+            sql.Identifier(longitude)))
         id_location = int(cursor.fetchall()[0])
     if dt and sens and freq_range and type != 'NULL':
-        cursor.execute(f'insert into property (dt, sens, freq_range, type)'
-                       f'values ({dt},{sens}, {freq_range}, \'{type}\');'
-                       f'SELECT currval(pg_get_serial_sequence(\'property\',\'property_key\'));')
+        cursor.execute(sql.SQL('insert into property (dt, sens, freq_range, type)'
+                               'values ({},{}, {}, {});'
+                               'SELECT currval(pg_get_serial_sequence(\'property\',\'property_key\'));').format(
+            sql.Identifier(dt), sql.Identifier(sens), sql.Identifier(freq_range), sql.Identifier(type)))
         id_property = int(cursor.fetchall()[0])
 
     cursor.execute(
-        f'INSERT INTO station (network, channel, name_station, property_key, location_key,setup_date,update_time, comment) '
-        f'VALUES (\'{name_network}\', \'{name_channel}\', \'{name_station}\', {convert_value(id_property)}, '
-        f'{convert_value(id_location)}, NULL, now(),\'{comment}\');'
-        f'SELECT currval(pg_get_serial_sequence(\'station\',\'station_key\'));')
+        sql.SQL(
+            'INSERT INTO station (network, channel, name_station, property_key, location_key,setup_date,update_time, comment) '
+            'VALUES ({}, {}, {}, {}, '
+            '{}, NULL, now(),{});'
+            'SELECT currval(pg_get_serial_sequence(\'station\',\'station_key\'));').format(
+            sql.Identifier(name_network),
+            sql.Identifier(name_channel),
+            sql.Identifier(name_station),
+            sql.Identifier(convert_value(id_property)),
+            sql.Identifier(convert_value(id_location)),
+            sql.Identifier(comment)))
     res = cursor.fetchall()[0]
     cursor.close()
     print(res[0])
@@ -72,11 +87,22 @@ def insert_earthquake(name_channel, name_network, name_station, arrival_time_val
     seismic_date_key = insert_table_seismic_date(station_key, seismic_date_value, cursor)
     phase_key = insert_table_phase(phase_value, cursor)
 
-    cursor.execute(f'insert into earthquake (okigin_time, arrival_time_key,distance_key, azimuth_key,sign_key,'
-                   f'level_key, magnitude_key, seismic_data_key, intens_key, quality_key, phase_key)'
-                   f'values (NULL,{convert_value(arrival_time_key)},{convert_value(distance_key)},{convert_value(azimuth_key)},{convert_value(sign_key)},'
-                   f'{convert_value(level_key)}, {convert_value(magnitude_key)},{convert_value(seismic_date_key)}, '
-                   f'{convert_value(intens_key)}, {convert_value(quality_key)}, {convert_value(phase_key)});')
+    cursor.execute(sql.SQL('insert into earthquake (okigin_time, arrival_time_key,distance_key, azimuth_key,sign_key,'
+                           'level_key, magnitude_key, seismic_data_key, intens_key, quality_key, phase_key)'
+                           'values (NULL,{},{},{},{},'
+                           '{}, {},{}, '
+                           '{}, {}, {});').format(
+        sql.Identifier(convert_value(arrival_time_key)),
+        sql.Identifier(convert_value(distance_key)),
+        sql.Identifier(convert_value(azimuth_key)),
+        sql.Identifier(convert_value(sign_key)),
+        sql.Identifier(convert_value(level_key)),
+        sql.Identifier(convert_value(magnitude_key)),
+        sql.Identifier(convert_value(seismic_date_key)),
+        sql.Identifier(convert_value(intens_key)),
+        sql.Identifier(convert_value(quality_key)),
+        sql.Identifier(convert_value(phase_key))
+    ))
     cursor.close()
 
 
@@ -86,20 +112,28 @@ def update_location_in_station(name_station, x=None, y=None, z=None, latitude=No
     cursor = conn.cursor()
 
     if x and y and z and latitude and longitude:
-        cursor.execute(f'insert into location (x,y,z,latitude,longitude)'
-                       f'values ({x},{y},{z},{latitude}, {longitude});'
-                       f'SELECT currval(pg_get_serial_sequence(\'location\',\'location_key\'));')
+        cursor.execute(sql.SQL('insert into location (x,y,z,latitude,longitude)'
+                               'values ({},{},{},{}, {});'
+                               'SELECT currval(pg_get_serial_sequence(\'location\',\'location_key\'));').format(
+            sql.Identifier(x),
+            sql.Identifier(y),
+            sql.Identifier(z),
+            sql.Identifier(latitude),
+            sql.Identifier(longitude)
+        ))
         id_location = int(cursor.fetchall()[0])
     else:
         cursor.close()
         return
-    cursor.execute(f'UPDATE station '
-                   f'SET '
-                   f'location_key = {id_location},'
-                   f'update_time = now() '
-                   f'FROM station '
-                   f'WHERE'
-                   f' station.name_station = \'{name_station}\';')
+    cursor.execute(sql.SQL('UPDATE station '
+                           'SET '
+                           'location_key = {},'
+                           'update_time = now() '
+                           'FROM station '
+                           'WHERE'
+                           ' station.name_station = {};').format(
+        sql.Identifier(id_location),
+        sql.Identifier(name_station)))
     cursor.close()
 
 
@@ -129,9 +163,11 @@ def find_key(name_table, name_value, name_key, value):
 def insert_table_arrival_time(station_key, arrival_time_value, cursor):
     arrival_time_key = None
     if arrival_time_value != 'NULL':
-        cursor.execute(f'insert into arrival_time (value, station_key)'
-                       f'values (\'{arrival_time_value}\',{convert_value(station_key)});'
-                       f'SELECT currval(pg_get_serial_sequence(\'arrival_time\',\'arrival_time_key\'));')
+        cursor.execute(sql.SQL('insert into arrival_time (value, station_key)'
+                       'values ({},{});'
+                       'SELECT currval(pg_get_serial_sequence(\'arrival_time\',\'arrival_time_key\'));').format(
+            sql.Identifier(arrival_time_value),
+            sql.Identifier(convert_value(station_key))))
         arrival_time_key = cursor.fetchall()[0][0]
     return arrival_time_key
 
@@ -142,9 +178,11 @@ def insert_table_azimuth(station_key, azimuth_value, cursor):
     key = find_key('azimuth', 'value', 'azimuth_key', azimuth_value)
     if len(key) != 0:
         return key[0][0]
-    cursor.execute(f'insert into azimuth (value, station_key)'
-                       f'values ({convert_value(azimuth_value)},{convert_value(station_key)});'
-                       f'SELECT currval(pg_get_serial_sequence(\'azimuth\',\'azimuth_key\'));')
+    cursor.execute(sql.SQL('insert into azimuth (value, station_key)'
+                   'values ({},{});'
+                   'SELECT currval(pg_get_serial_sequence(\'azimuth\',\'azimuth_key\'));').format(
+        sql.Identifier(convert_value(azimuth_value)),
+        sql.Identifier(convert_value(station_key))))
     azimuth_key = cursor.fetchall()[0][0]
     return azimuth_key
 
@@ -156,9 +194,11 @@ def insert_table_distance(station_key, distance_value, cursor):
     if len(key) != 0:
         return key[0][0]
     distance_key = 0
-    cursor.execute(f'insert into distance (value, station_key)'
-                       f'values ({convert_value(distance_value)},{convert_value(station_key)});'
-                       f'SELECT currval(pg_get_serial_sequence(\'distance\',\'distance_key\'));')
+    cursor.execute(sql.SQL('insert into distance (value, station_key)'
+                   'values ({},{});'
+                   'SELECT currval(pg_get_serial_sequence(\'distance\',\'distance_key\'));').format(
+        sql.Identifier(convert_value(distance_value)),
+        sql.Identifier(convert_value(station_key))))
     distance_key = cursor.fetchall()[0][0]
     return distance_key
 
@@ -170,9 +210,11 @@ def insert_table_intens(station_key, intens_value, cursor):
     if len(key) != 0:
         return key[0][0]
 
-    cursor.execute(f'insert into intens (value, station_key)'
-                    f'values ({convert_value(intens_value)},{convert_value(station_key)});'
-                    f'SELECT currval(pg_get_serial_sequence(\'intens\',\'intens_key\'));')
+    cursor.execute(sql.SQL('insert into intens (value, station_key)'
+                   'values ({},{});'
+                   'SELECT currval(pg_get_serial_sequence(\'intens\',\'intens_key\'));').format(
+        sql.Identifier(convert_value(intens_value)),
+        sql.Identifier(convert_value(station_key))))
     key = cursor.fetchall()[0][0]
     return key
 
@@ -183,9 +225,11 @@ def insert_table_level(station_key, level_value, cursor):
     key = find_key('level', 'value', 'level_key', level_value)
     if len(key) != 0:
         return key[0][0]
-    cursor.execute(f'insert into level (value, station_key)'
-                       f'values ({convert_value(level_value)},{convert_value(station_key)});'
-                       f'SELECT currval(pg_get_serial_sequence(\'level\',\'level_key\'));')
+    cursor.execute(sql.SQL('insert into level (value, station_key)'
+                   'values ({},{});'
+                   'SELECT currval(pg_get_serial_sequence(\'level\',\'level_key\'));').format(
+        sql.Identifier(convert_value(level_value)),
+        sql.Identifier(convert_value(station_key))))
     key = cursor.fetchall()[0][0]
     return key
 
@@ -197,9 +241,11 @@ def insert_table_magnitude(station_key, magnitude_value, cursor):
     if len(key) != 0:
         return key[0][0]
 
-    cursor.execute(f'insert into magnitude (value, station_key)'
-                       f'values ({convert_value(magnitude_value)},{convert_value(station_key)});'
-                       f'SELECT currval(pg_get_serial_sequence(\'magnitude\',\'magnitude_key\'));')
+    cursor.execute(sql.SQL('insert into magnitude (value, station_key)'
+                   'values ({},{});'
+                   'SELECT currval(pg_get_serial_sequence(\'magnitude\',\'magnitude_key\'));').format(
+        sql.Identifier(convert_value(magnitude_value)),
+        sql.Identifier(convert_value(station_key))))
     key = cursor.fetchall[0][0]
     return key
 
@@ -211,9 +257,10 @@ def insert_table_quality(quality_value, cursor):
     key = find_key('quality', 'value', 'quality_key', f'\'quality_value\'')
     if len(key) != 0:
         return key[0][0]
-    cursor.execute(f'insert into quality (value)'
-                       f'values (\'{convert_value(quality_value)}\');'
-                       f'SELECT currval(pg_get_serial_sequence(\'quality\',\'quality_key\'));')
+    cursor.execute(sql.SQL('insert into quality (value)'
+                   'values ({});'
+                   'SELECT currval(pg_get_serial_sequence(\'quality\',\'quality_key\'));').format(
+        sql.Identifier(convert_value(quality_value))))
     key = cursor.fetchall()[0][0]
     return key
 
@@ -224,9 +271,11 @@ def insert_table_sign(station_key, sign_value, cursor):
     key = find_key('sign', 'value', 'sign_key', sign_value)
     if len(key) != 0:
         return key[0][0]
-    cursor.execute(f'insert into sign (value, station_key)'
-                       f'values ({convert_value(sign_value)},{convert_value(station_key)});'
-                       f'SELECT currval(pg_get_serial_sequence(\'sign\',\'sign_key\'));')
+    cursor.execute(sql.SQL('insert into sign (value, station_key)'
+                   'values ({},{});'
+                   'SELECT currval(pg_get_serial_sequence(\'sign\',\'sign_key\'));').format(
+        sql.Identifier(convert_value(sign_value)),
+        sql.Identifier(convert_value(station_key))))
     key = cursor.fetchall()[0][0]
     return key
 
@@ -237,9 +286,10 @@ def insert_table_phase(phase_value, cursor):
     key = find_key('phase', 'value', 'phase_key', f'\'phase_value\'')
     if len(key) != 0:
         return key[0][0]
-    cursor.execute(f'insert into phase (value)'
-                       f'values (\'{convert_value(phase_value)}\');'
-                       f'SELECT currval(pg_get_serial_sequence(\'phase\',\'phase_key\'));')
+    cursor.execute(sql.SQL('insert into phase (value)'
+                   'values ({});'
+                   'SELECT currval(pg_get_serial_sequence(\'phase\',\'phase_key\'));').format(
+        sql.Identifier(convert_value(phase_value))))
     key = cursor.fetchall()[0][0]
     return key
 
@@ -251,9 +301,11 @@ def insert_table_seismic_date(station_key, seismic_date_value, cursor):
     if len(key) != 0:
         return key[0][0]
 
-    cursor.execute(f'insert into seismic_date (value, station_key)'
-                       f'values (\'{seismic_date_value}\',{convert_value(station_key)});'
-                       f'SELECT currval(pg_get_serial_sequence(\'seismic_date\',\'seismic_date_key\'));')
+    cursor.execute(sql.SQL('insert into seismic_date (value, station_key)'
+                   'values ({},{});'
+                   'SELECT currval(pg_get_serial_sequence(\'seismic_date\',\'seismic_date_key\'));').format(
+        sql.Identifier(seismic_date_value),
+        sql.Identifier(convert_value(station_key))))
     key = cursor.fetchall()[0][0]
     return key
 
@@ -303,7 +355,7 @@ def search_phase(phase_value):
     return res
 
 
-def search_date_interval(date1,date2):
+def search_date_interval(date1, date2):
     conn = psycopg2.connect(dbname='postgres', user='geo_user',
                             password='123', host='localhost,192.168.0.1', port='5432')
     with conn.cursor() as curs:
